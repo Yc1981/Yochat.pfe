@@ -1,0 +1,6 @@
+{
+  "name": "YoChat",
+  "description": "A real-time English speaking avatar app featuring YoChat, a friendly English teacher for Tunisian learners.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
