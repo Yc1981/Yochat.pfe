@@ -387,6 +387,7 @@ export default function App() {
             isConnecting={isConnecting}
             errorMsg={errorMsg}
             speakerVolume={speakerVolume}
+            onRetry={startConversation}
           />
           <VoiceControls
             onStart={startConversation}

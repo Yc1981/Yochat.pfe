@@ -1,6 +1,6 @@
 import React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Volume2, Sparkles, MessageCircle, AlertCircle, Lightbulb } from "lucide-react";
+import { Volume2, Sparkles, MessageCircle, AlertCircle, Lightbulb, ExternalLink, ShieldAlert, RefreshCw } from "lucide-react";
 import teacherAvatar from "../assets/images/teacher_avatar_1782502684748.jpg";
 
 // High-quality, friendly portrait of an English teacher with beautiful curly hair and red top/lips
@@ -13,6 +13,7 @@ interface AvatarTeacherProps {
   isConnecting: boolean;
   errorMsg?: string | null;
   speakerVolume?: number;
+  onRetry?: () => void;
 }
 
 export default function AvatarTeacher({
@@ -22,6 +23,7 @@ export default function AvatarTeacher({
   isConnecting,
   errorMsg,
   speakerVolume,
+  onRetry,
 }: AvatarTeacherProps) {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   
@@ -255,12 +257,69 @@ export default function AvatarTeacher({
       {/* Main Status & Teacher Speech Box */}
       <div className="w-full mt-6 flex flex-col items-center gap-4 relative z-10 max-w-lg">
         {errorMsg ? (
-          <div className="w-full bg-[#fdfaf7] border border-red-200 p-4 rounded-2xl flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-semibold text-red-800">Connection Failed</span>
-              <p className="text-xs text-red-600 leading-relaxed">{errorMsg}</p>
+          <div className="w-full flex flex-col gap-4">
+            <div className="w-full bg-[#fdfaf7] border border-red-200 p-4 rounded-2xl flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-semibold text-red-800">Connection Failed</span>
+                <p className="text-xs text-red-600 leading-relaxed">{errorMsg}</p>
+              </div>
             </div>
+
+            {/* Expanded Microphone Access Guide if permission was denied */}
+            {(errorMsg.toLowerCase().includes("permission") || 
+              errorMsg.toLowerCase().includes("deny") || 
+              errorMsg.toLowerCase().includes("allow") || 
+              errorMsg.toLowerCase().includes("notallowed")) && (
+              <div className="w-full bg-amber-50/75 border border-amber-200/80 rounded-2xl p-5 flex flex-col gap-3 text-left">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-amber-700" />
+                  <span className="text-xs uppercase font-bold text-amber-800 tracking-wider">Microphone Troubleshooter</span>
+                </div>
+                
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Web browsers often block microphone access within preview windows (iFrames) for security reasons. Here are two quick ways to fix this:
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1.5">
+                  <div className="bg-white border border-amber-200/50 p-3 rounded-xl flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800">1. Open Standalone</h4>
+                      <p className="text-[11px] text-slate-500 mt-1 leading-normal">
+                        Bypass the iframe sandbox. Open YoChat in a new browser tab where microphone permissions can be granted normally.
+                      </p>
+                    </div>
+                    <a
+                      href={window.location.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex items-center justify-center gap-1.5 text-xs font-bold bg-[#5A5A40] hover:bg-[#4a4a35] text-white py-1.5 px-3 rounded-lg transition-colors text-center cursor-pointer"
+                    >
+                      <span>Open standalone tab</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+
+                  <div className="bg-white border border-amber-200/50 p-3 rounded-xl flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800">2. Reset Site Permissions</h4>
+                      <p className="text-[11px] text-slate-500 mt-1 leading-normal">
+                        Look for the lock or settings icon next to the address bar at the top of your browser, and set Microphone to <strong>Allow</strong>.
+                      </p>
+                    </div>
+                    {onRetry && (
+                      <button
+                        onClick={onRetry}
+                        className="mt-3 inline-flex items-center justify-center gap-1.5 text-xs font-bold border border-[#e5e5df] hover:bg-slate-50 text-slate-700 py-1.5 px-3 rounded-lg transition-all cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-slate-500 animate-spin-hover" />
+                        <span>Retry connection</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : isConnecting ? (
           <div className="text-center py-4 flex flex-col items-center gap-2">
