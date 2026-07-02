@@ -12,10 +12,13 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
-// Scrape direct video/image asset from Meta AI share URL
+// Scrape direct video/image asset from Meta AI or Popvid share URL
 app.get("/api/meta-avatar", async (req, res) => {
   try {
-    const shareUrl = "https://www.meta.ai/share/m/t5E0dUQXJt";
+    const queryUrl = req.query.url as string;
+    const shareUrl = queryUrl || "https://www.meta.ai/share/m/t5E0dUQXJt";
+    const isPopvid = shareUrl.toLowerCase().includes("popvid.ai");
+
     const response = await fetch(shareUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -24,90 +27,99 @@ app.get("/api/meta-avatar", async (req, res) => {
       }
     });
     if (!response.ok) {
-      throw new Error(`Failed to fetch Meta AI share page: ${response.statusText}`);
+      throw new Error(`Failed to fetch share page: ${response.statusText}`);
     }
     const html = await response.text();
     
-    // Save to a file to inspect the html structure and find the media url
+    // Save to a file for inspection
     try {
       const fs = require("fs");
-      fs.writeFileSync("meta_scraped.txt", html, "utf8");
+      fs.writeFileSync("scraped_debug.txt", html, "utf8");
     } catch (e) {}
     
     let mediaUrl: string | null = null;
     let isVideo = false;
     
-    // Look for any link containing .mp4 or similar video extensions
-    const mp4Regex = /(https?:\/\/[^"'\s>\\]+?\.mp4[^"'\s>]*)/i;
-    const mp4Match = html.match(mp4Regex);
-    if (mp4Match) {
-      mediaUrl = mp4Match[1];
-      isVideo = true;
-    }
+    // Pre-clean the HTML of unicode escapes and backslashes so regex can capture complete URLs
+    const cleanHtml = html
+      .split("\\u0026").join("&")
+      .split("\\/").join("/")
+      .split("&amp;").join("&");
     
-    // If we have escaped slashes or unicode characters in raw JSON/HTML
-    if (!mediaUrl) {
-      const escapedMp4Regex = /(https?:\\\/\\\/[^"'\s>]+?\.mp4[^"'\s>]*)/i;
-      const escapedMatch = html.match(escapedMp4Regex);
-      if (escapedMatch) {
-        mediaUrl = escapedMatch[1];
+    if (isPopvid) {
+      // Look for popvid direct mp4 links
+      const popvidRegex = /(https?:\/\/cdn\.popvid\.ai\/[^"'\s>]+?\.mp4[^"'\s>]*)/i;
+      const popvidMatch = cleanHtml.match(popvidRegex);
+      if (popvidMatch) {
+        mediaUrl = popvidMatch[1];
         isVideo = true;
       }
-    }
-
-    if (!mediaUrl) {
-      // Look for video first
-      const ogVideoMatch = html.match(/<meta[^>]*property="og:video"[^>]*content="([^"]+)"/i) ||
-                          html.match(/<meta[^>]*content="([^"]+)"[^>]*property="og:video"/i);
-      if (ogVideoMatch) {
-        mediaUrl = ogVideoMatch[1];
+    } else {
+      // Look for any link containing .mp4 or similar video extensions
+      const mp4Regex = /(https?:\/\/[^"'\s>]+?\.mp4[^"'\s>]*)/i;
+      const mp4Match = cleanHtml.match(mp4Regex);
+      if (mp4Match) {
+        mediaUrl = mp4Match[1];
         isVideo = true;
       }
-    }
-    
-    if (!mediaUrl) {
-      const ogImageMatch = html.match(/<meta[^>]*property="og:image"[^>]*content="([^"]+)"/i) ||
-                          html.match(/<meta[^>]*content="([^"]+)"[^>]*property="og:image"/i);
-      if (ogImageMatch) {
-        mediaUrl = ogImageMatch[1];
-        if (mediaUrl.toLowerCase().includes(".mp4")) {
+      
+      if (!mediaUrl) {
+        // Look for video first
+        const ogVideoMatch = cleanHtml.match(/<meta[^>]*property="og:video"[^>]*content="([^"]+)"/i) ||
+                            cleanHtml.match(/<meta[^>]*content="([^"]+)"[^>]*property="og:video"/i);
+        if (ogVideoMatch) {
+          mediaUrl = ogVideoMatch[1];
           isVideo = true;
         }
       }
-    }
-
-    // Try finding JSON configs or standard script media patterns
-    if (!mediaUrl) {
-      const videoMatch = html.match(/"video_url"\s*:\s*"([^"]+)"/i) || html.match(/"video"\s*:\s*"([^"]+)"/i);
-      if (videoMatch) {
-        mediaUrl = videoMatch[1];
-        isVideo = true;
+      
+      if (!mediaUrl) {
+        const ogImageMatch = cleanHtml.match(/<meta[^>]*property="og:image"[^>]*content="([^"]+)"/i) ||
+                            cleanHtml.match(/<meta[^>]*content="([^"]+)"[^>]*property="og:image"/i);
+        if (ogImageMatch) {
+          mediaUrl = ogImageMatch[1];
+          if (mediaUrl.toLowerCase().includes(".mp4")) {
+            isVideo = true;
+          }
+        }
       }
-    }
-    
-    if (!mediaUrl) {
-      const imageMatch = html.match(/"image_url"\s*:\s*"([^"]+)"/i) || html.match(/"image"\s*:\s*"([^"]+)"/i);
-      if (imageMatch) {
-        mediaUrl = imageMatch[1];
-        if (mediaUrl.toLowerCase().includes(".mp4")) {
+
+      // Try finding JSON configs or standard script media patterns
+      if (!mediaUrl) {
+        const videoMatch = cleanHtml.match(/"video_url"\s*:\s*"([^"]+)"/i) || cleanHtml.match(/"video"\s*:\s*"([^"]+)"/i);
+        if (videoMatch) {
+          mediaUrl = videoMatch[1];
           isVideo = true;
         }
       }
-    }
+      
+      if (!mediaUrl) {
+        const imageMatch = cleanHtml.match(/"image_url"\s*:\s*"([^"]+)"/i) || cleanHtml.match(/"image"\s*:\s*"([^"]+)"/i);
+        if (imageMatch) {
+          mediaUrl = imageMatch[1];
+          if (mediaUrl.toLowerCase().includes(".mp4")) {
+            isVideo = true;
+          }
+        }
+      }
 
-    // Look for any CDN links starting with scontent that could be the direct video/image
-    if (!mediaUrl) {
-      const scontentMatch = html.match(/(https:\/\/scontent[^"'\s>]+)/);
-      if (scontentMatch) {
-        mediaUrl = scontentMatch[1];
-        if (mediaUrl.toLowerCase().includes(".mp4")) {
-          isVideo = true;
+      // Look for any CDN links starting with scontent that could be the direct video/image
+      if (!mediaUrl) {
+        const scontentMatch = cleanHtml.match(/(https:\/\/scontent[^"'\s>]+)/);
+        if (scontentMatch) {
+          mediaUrl = scontentMatch[1];
+          if (mediaUrl.toLowerCase().includes(".mp4")) {
+            isVideo = true;
+          }
         }
       }
     }
 
     // Clean up HTML entities, Unicode escapes, and backslashes
     if (mediaUrl) {
+      if (mediaUrl.endsWith("\\")) {
+        mediaUrl = mediaUrl.slice(0, -1);
+      }
       mediaUrl = mediaUrl
         .replace(/\\u0026/g, "&")
         .replace(/\\/g, "") // remove all escape backslashes
@@ -121,7 +133,7 @@ app.get("/api/meta-avatar", async (req, res) => {
     
     res.json({ success: !!mediaUrl, url: mediaUrl, isVideo });
   } catch (error: any) {
-    console.error("Meta AI Avatar error:", error);
+    console.error("Scraper API error:", error);
     res.json({ success: false, error: error.message });
   }
 });
@@ -168,10 +180,13 @@ wss.on("connection", async (clientWs, req) => {
     const unit = url.searchParams.get("unit") || "Unit 1: Welcome";
     const lesson = url.searchParams.get("lesson") || "Lesson 1: Greeting Friends";
     const scenario = url.searchParams.get("scenario") || "Greeting your teacher on the first day of class";
+    const voice = url.searchParams.get("voice") || "Aoede";
+    const teacherName = url.searchParams.get("teacherName") || "Ons";
 
     // System instruction for the Gemini voice model
-    const systemInstruction = `You are YoChat, a friendly English teacher for Tunisian ${grade} learners.
-Speak slowly and clearly.
+    const isYamen = teacherName.toLowerCase().includes("yamen") || teacherName.toLowerCase().includes("david");
+    const systemInstruction = `You are ${isYamen ? "Yamen, a friendly and warm male" : "Ons, a friendly and warm female"} English teacher for Tunisian ${grade} learners.
+Speak slowly and clearly with a supportive, polite voice.
 Use simple A1/A2 English.
 Ask one question at a time.
 Correct mistakes gently.
@@ -182,14 +197,14 @@ Selected Role-play Scenario: ${scenario}
 
 Do not give long explanations. Keep the conversation oral and interactive. Use simple words and structures suited for 11-13 year olds.`;
 
-    console.log(`Starting Gemini Live Session for ${grade} | Unit: ${unit} | Lesson: ${lesson}`);
+    console.log(`Starting Gemini Live Session for ${grade} | Teacher: ${teacherName} (${voice}) | Unit: ${unit}`);
 
     session = await ai.live.connect({
       model: "gemini-3.1-flash-live-preview",
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } }, // 'Aoede' is highly conversational and friendly
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
         },
         systemInstruction: systemInstruction,
       },

@@ -35,6 +35,8 @@ async def websocket_endpoint(websocket: WebSocket):
     unit = query_params.get("unit", "Unit 1")
     lesson = query_params.get("lesson", "Lesson 1")
     scenario = query_params.get("scenario", "")
+    voice = query_params.get("voice", "Aoede")
+    teacher_name = query_params.get("teacherName", "Sarah")
 
     if not GEMINI_API_KEY:
         await websocket.accept()
@@ -46,11 +48,13 @@ async def websocket_endpoint(websocket: WebSocket):
         return
 
     await websocket.accept()
-    print(f"Accepted student connection for {grade} - {lesson}")
+    print(f"Accepted student connection for {grade} - {lesson} with teacher {teacher_name}")
 
     # Set up system instructions and live config
+    is_david = teacher_name.lower() == "david"
+    role_desc = "Mr. David, a friendly and warm male" if is_david else "Mrs. Sarah, a friendly and warm female"
     system_instruction = (
-        f"You are YoChat, a friendly English teacher for Tunisian {grade} learners.\n"
+        f"You are {role_desc} English teacher for Tunisian {grade} learners.\n"
         "Speak slowly and clearly.\n"
         "Use simple A1/A2 English.\n"
         "Ask one question at a time.\n"
@@ -59,7 +63,7 @@ async def websocket_endpoint(websocket: WebSocket):
         f"Selected Unit: {unit}\n"
         f"Selected Lesson: {lesson}\n"
         f"Selected Role-play Scenario: {scenario}\n\n"
-        "Do not give long explanations. Keep the conversation oral and interactive."
+        "Do not give long explanations. Keep the conversation oral and interactive. Use simple words and structures suited for 11-13 year olds."
     )
 
     gemini_config = {
@@ -70,7 +74,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "speechConfig": {
                     "voiceConfig": {
                         "prebuiltVoiceConfig": {
-                            "voiceName": "Aoede" # friendly female voice
+                            "voiceName": voice
                         }
                     }
                 }

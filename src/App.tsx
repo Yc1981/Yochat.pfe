@@ -6,6 +6,7 @@ import { Sparkles, GraduationCap, HelpCircle } from "lucide-react";
 
 export default function App() {
   const [selectedLesson, setSelectedLesson] = useState<LessonData>(LESSONS_DATABASE[0]);
+  const [selectedTeacher, setSelectedTeacher] = useState<"sarah" | "david">("sarah");
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -173,6 +174,8 @@ export default function App() {
         unit: selectedLesson.unit,
         lesson: selectedLesson.lesson,
         scenario: selectedLesson.scenario,
+        voice: selectedTeacher === "david" ? "Puck" : "Aoede",
+        teacherName: selectedTeacher === "david" ? "Yamen" : "Ons",
       });
 
       const wsUrl = `${protocol}//${host}/ws/live?${queryParams.toString()}`;
@@ -388,6 +391,8 @@ export default function App() {
             errorMsg={errorMsg}
             speakerVolume={speakerVolume}
             onRetry={startConversation}
+            selectedTeacher={selectedTeacher}
+            onTeacherChange={setSelectedTeacher}
           />
           <VoiceControls
             onStart={startConversation}
